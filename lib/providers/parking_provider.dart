@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/payment_method.dart';
@@ -6,26 +8,100 @@ import '../models/ticket.dart';
 import '../models/vehicle.dart';
 
 class ParkingProvider extends ChangeNotifier {
-  final List<Vehicle> _vehicles = [];
-  final List<Ticket> _tickets = [];
+  static const _keyVehicles = 'parking.vehicles';
+  static const _keyTickets = 'parking.tickets';
+
+  List<Vehicle> _vehicles = [];
+  List<Ticket> _tickets = [];
   final List<PaymentMethod> _paymentMethods = [];
   static const _uuid = Uuid();
+  bool _initialized = false;
 
   ParkingProvider() {
-    _loadDummyData();
+    _init();
   }
 
-  List<Vehicle> get vehicles => _vehicles;
-  List<Ticket> get tickets => _tickets;
-  List<PaymentMethod> get paymentMethods => _paymentMethods;
+  List<Vehicle> get vehicles => List.unmodifiable(_vehicles);
+  List<Ticket> get tickets => List.unmodifiable(_tickets);
+  List<PaymentMethod> get paymentMethods => List.unmodifiable(_paymentMethods);
+  bool get initialized => _initialized;
 
-  void addVehicle(Vehicle vehicle) {
-    _vehicles.add(vehicle);
+  Future<void> _init() async {
+    await _loadFromPrefs();
+    _loadPaymentMethods();
+    _initialized = true;
     notifyListeners();
   }
 
-  // Check In (Create Ticket)
-  Ticket checkIn(String vehicleId) {
+  Future<void> _loadFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      final vehiclesJson = prefs.getString(_keyVehicles);
+      if (vehiclesJson != null) {
+        final List<dynamic> list = jsonDecode(vehiclesJson);
+        _vehicles = list.map((v) => Vehicle.fromJson(v)).toList();
+      }
+
+      final ticketsJson = prefs.getString(_keyTickets);
+      if (ticketsJson != null) {
+        final List<dynamic> list = jsonDecode(ticketsJson);
+        _tickets = list.map((t) => Ticket.fromJson(t)).toList();
+      }
+
+      if (_vehicles.isEmpty) {
+        _loadDummyData();
+        await _saveToPrefs();
+      }
+    } catch (e) {
+      debugPrint('Error loading parking data: $e');
+    }
+  }
+
+  Future<void> _saveToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyVehicles, jsonEncode(_vehicles.map((v) => v.toJson()).toList()));
+      await prefs.setString(_keyTickets, jsonEncode(_tickets.map((t) => t.toJson()).toList()));
+    } catch (e) {
+      debugPrint('Error saving parking data: $e');
+    }
+  }
+
+  Future<void> addVehicle(Vehicle vehicle) async {
+    _vehicles.add(vehicle);
+    notifyListeners();
+    await _saveToPrefs();
+  }
+
+  Future<void> updateVehicle(Vehicle updatedVehicle) async {
+    final index = _vehicles.indexWhere((v) => v.id == updatedVehicle.id);
+    if (index != -1) {
+      _vehicles[index] = updatedVehicle;
+      notifyListeners();
+      await _saveToPrefs();
+    }
+  }
+
+  Future<void> deleteVehicle(String vehicleId) async {
+    _vehicles.removeWhere((v) => v.id == vehicleId);
+    _tickets.removeWhere((t) => t.vehicleId == vehicleId && t.status == TicketStatus.active);
+    notifyListeners();
+    await _saveToPrefs();
+  }
+
+  Vehicle? getVehicle(String id) {
+    try {
+      return _vehicles.firstWhere((v) => v.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Ticket> checkIn(String vehicleId) async {
+    final existing = getActiveTicketForVehicle(vehicleId);
+    if (existing != null) return existing;
+
     final ticket = Ticket(
       id: _uuid.v4(),
       vehicleId: vehicleId,
@@ -34,33 +110,25 @@ class ParkingProvider extends ChangeNotifier {
     );
     _tickets.add(ticket);
     notifyListeners();
+    await _saveToPrefs();
     return ticket;
   }
 
-  void checkOut(String ticketId, String paymentMethodId) {
+  Future<void> checkOut(String ticketId, String paymentMethodId) async {
     final ticketIndex = _tickets.indexWhere((t) => t.id == ticketId);
     if (ticketIndex != -1) {
       final ticket = _tickets[ticketIndex];
-      final cost = ticket.currentCost;
-
       _tickets[ticketIndex] = Ticket(
         id: ticket.id,
         vehicleId: ticket.vehicleId,
         entryTime: ticket.entryTime,
         exitTime: DateTime.now(),
         status: TicketStatus.completed,
-        paidAmount: cost,
+        paidAmount: ticket.currentCost,
         paymentMethodId: paymentMethodId,
       );
       notifyListeners();
-    }
-  }
-
-  Vehicle? getVehicle(String id) {
-    try {
-      return _vehicles.firstWhere((v) => v.id == id);
-    } catch (e) {
-      return null;
+      await _saveToPrefs();
     }
   }
 
@@ -74,41 +142,8 @@ class ParkingProvider extends ChangeNotifier {
     }
   }
 
-  void _loadDummyData() {
-    final v1 = Vehicle(
-      id: _uuid.v4(),
-      plate: 'ABC-1234',
-      model: 'Toyota Corolla',
-      color: 'Silver',
-      ownerName: 'João Silva',
-      ownerCpf: '123.456.789-00',
-      ownerContact: '(11) 98765-4321',
-      ownerId: 'user-1',
-    );
-
-    final v2 = Vehicle(
-      id: _uuid.v4(),
-      plate: 'XYZ-9876',
-      model: 'Honda Civic',
-      color: 'Black',
-      ownerName: 'Maria Oliveira',
-      ownerCpf: '987.654.321-11',
-      ownerContact: '(21) 91234-5678',
-      ownerId: 'user-2',
-    );
-
-    _vehicles.addAll([v1, v2]);
-    _tickets.add(
-      Ticket(
-        id: _uuid.v4(),
-        vehicleId: v1.id,
-        entryTime: DateTime.now().subtract(
-          const Duration(hours: 2, minutes: 30),
-        ),
-        status: TicketStatus.active,
-      ),
-    );
-
+  void _loadPaymentMethods() {
+    _paymentMethods.clear();
     _paymentMethods.addAll([
       PaymentMethod(
         id: '1',
@@ -135,11 +170,25 @@ class ParkingProvider extends ChangeNotifier {
       ),
       PaymentMethod(
         id: '4',
-        name: 'Cash',
+        name: 'Dinheiro',
         type: PaymentType.cash,
         icon: Icons.money,
         color: Colors.grey,
       ),
     ]);
+  }
+
+  void _loadDummyData() {
+    final v1 = Vehicle(
+      id: _uuid.v4(),
+      plate: 'ABC-1234',
+      model: 'Toyota Corolla',
+      color: 'Prata',
+      ownerName: 'João Silva',
+      ownerCpf: '123.456.789-00',
+      ownerContact: '(11) 98765-4321',
+      ownerId: 'user-1',
+    );
+    _vehicles.add(v1);
   }
 }

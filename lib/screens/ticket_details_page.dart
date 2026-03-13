@@ -43,7 +43,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   void _processPayment() async {
     if (_selectedPaymentMethod == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a payment method')),
+        const SnackBar(content: Text('Por favor, selecione um método de pagamento')),
       );
       return;
     }
@@ -58,7 +58,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          content: const Text('Payment Successful! Ticket Closed.'),
+          content: const Text('Pagamento realizado com sucesso! Ticket encerrado.'),
         ),
       );
       context.pop();
@@ -74,14 +74,14 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       ticket = provider.tickets.firstWhere((t) => t.id == widget.ticketId);
     } catch (e) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Error')),
-        body: const Center(child: Text('Ticket not found')),
+        appBar: AppBar(title: const Text('Erro')),
+        body: const Center(child: Text('Ticket não encontrado')),
       );
     }
 
     final vehicle = provider.getVehicle(ticket.vehicleId);
     if (vehicle == null) {
-      return const Scaffold(body: Center(child: Text('Vehicle not found')));
+      return const Scaffold(body: Center(child: Text('Veículo não encontrado')));
     }
 
     final cost = ticket.currentCost;
@@ -90,7 +90,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final minutes = duration.inMinutes % 60;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ticket Details'), centerTitle: true),
+      appBar: AppBar(title: const Text('Detalhes do Ticket'), centerTitle: true),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -103,7 +103,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     width: double.infinity,
                     height: 180,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
+                      color: theme.colorScheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(16),
                       image: vehicle.photoUrl != null
                           ? DecorationImage(
@@ -143,7 +143,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Vehicle Information',
+                      'Informações do Veículo',
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -156,19 +156,19 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   ),
                   _buildAnimatedDetailRow(
                     context,
-                    'Owner Name',
+                    'Proprietário',
                     vehicle.ownerName,
                     450,
                   ),
                   _buildAnimatedDetailRow(
                     context,
-                    'Owner CPF',
+                    'CPF',
                     vehicle.ownerCpf,
                     500,
                   ),
                   _buildAnimatedDetailRow(
                     context,
-                    'Contact',
+                    'Contato',
                     vehicle.ownerContact,
                     550,
                   ),
@@ -176,7 +176,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Stay Information',
+                      'Informações da Estada',
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -189,13 +189,13 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   ),
                   _buildAnimatedDetailRow(
                     context,
-                    'Entry Time',
+                    'Horário de Entrada',
                     DateFormat('dd/MM/yyyy HH:mm').format(ticket.entryTime),
                     650,
                   ),
                   _buildAnimatedDetailRow(
                     context,
-                    'Duration',
+                    'Duração',
                     '${hours}h ${minutes}m',
                     700,
                   ),
@@ -215,14 +215,14 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
               child: Column(
                 children: [
                   Text(
-                    'Total Amount',
+                    'Valor Total',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                        NumberFormat.currency(symbol: 'R\$').format(cost),
+                        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(cost),
                         style: theme.textTheme.displayMedium?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
@@ -238,7 +238,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Payment Method',
+                  'Método de Pagamento',
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -279,7 +279,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      method.name,
+                                      method.name == 'PIX' ? 'PIX' : (method.name == 'Cash' ? 'Dinheiro' : method.name),
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
                                             fontWeight: FontWeight.bold,
@@ -314,7 +314,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
               }),
               const SizedBox(height: 32),
               GradientButton(
-                    text: 'Confirm Payment',
+                    text: 'Confirmar Pagamento',
                     onTap: _processPayment,
                     isLoading: _isLoading,
                   )
@@ -342,7 +342,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Paid & Completed',
+                      'Pago e Finalizado',
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: Colors.green,
                         fontWeight: FontWeight.bold,
@@ -350,7 +350,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     ).animate().fadeIn(delay: 200.milliseconds),
                     const SizedBox(height: 8),
                     Text(
-                      'Exit Time: ${DateFormat('HH:mm').format(ticket.exitTime ?? DateTime.now())}',
+                      'Saída: ${DateFormat('HH:mm').format(ticket.exitTime ?? DateTime.now())}',
                       style: theme.textTheme.bodyMedium,
                     ).animate().fadeIn(delay: 400.milliseconds),
                   ],

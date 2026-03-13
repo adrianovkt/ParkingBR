@@ -1,68 +1,87 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/user.dart';
+import '../services/auth_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
-  static const _prefsKeyUser = 'settings.user';
   static const _prefsKeyThemeMode = 'settings.themeMode';
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
 
-  AppUser _user = AppUser(
-    id: 'user-1',
-    fullName: 'João Silva',
-    cpf: '123.456.789-00',
-    contact: '(11) 98765-4321',
-    avatarUrl: null,
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-  );
-  AppUser get user => _user;
+  AppUser? _user;
+  AppUser? get user => _user;
 
   bool _loading = false;
   bool get loading => _loading;
 
   SettingsProvider() {
-    _load();
+    _init();
   }
 
-  Future<void> _load() async {
+  Future<void> _init() async {
     _loading = true;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString(_prefsKeyUser);
-      if (userJson != null && userJson.isNotEmpty) {
-        try {
-          final map = jsonDecode(userJson) as Map<String, dynamic>;
-          _user = AppUser.fromJson(map);
-        } catch (e) {
-          debugPrint('Failed to decode user from prefs: $e');
-        }
-      }
+      
+      // Load Theme
       final tm = prefs.getString(_prefsKeyThemeMode);
       if (tm != null) {
-        switch (tm) {
-          case 'light':
-            _themeMode = ThemeMode.light;
-            break;
-          case 'dark':
-            _themeMode = ThemeMode.dark;
-            break;
-          default:
-            _themeMode = ThemeMode.system;
-        }
+        _themeMode = switch (tm) {
+          'light' => ThemeMode.light,
+          'dark' => ThemeMode.dark,
+          _ => ThemeMode.system,
+        };
       }
+
+      // Load User
+      _user = await AuthService.I.getCurrentUser();
     } catch (e) {
-      debugPrint('Settings load failed: $e');
+      debugPrint('Settings init failed: $e');
     } finally {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> login(String email, String password) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      _user = await AuthService.I.login(email, password);
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+    required String cpf,
+  }) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      await AuthService.I.register(
+        name: name,
+        email: email,
+        password: password,
+        cpf: cpf,
+      );
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
+    await AuthService.I.logout();
+    _user = null;
+    notifyListeners();
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -84,11 +103,6 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> updateUser(AppUser newUser) async {
     _user = newUser.copyWith(updatedAt: DateTime.now());
     notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKeyUser, jsonEncode(_user.toJson()));
-    } catch (e) {
-      debugPrint('Failed to persist user: $e');
-    }
+    // In a real app, we'd update AuthService/Backend too
   }
 }

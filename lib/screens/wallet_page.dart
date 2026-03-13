@@ -14,13 +14,14 @@ class WalletPage extends StatelessWidget {
     final provider = Provider.of<ParkingProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Digital Wallet'), centerTitle: true),
+      appBar: AppBar(title: const Text('Carteira Digital'), centerTitle: true),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Add Card Feature Coming Soon!')),
+            const SnackBar(content: Text('Funcionalidade de Adicionar Cartão em breve!')),
           );
         },
+        tooltip: 'Adicionar Cartão',
         child: const Icon(Icons.add),
       ).animate().scale(curve: Curves.easeOutBack),
       body: SingleChildScrollView(
@@ -67,7 +68,7 @@ class WalletPage extends StatelessWidget {
                               duration: 1.seconds,
                             ),
                             Text(
-                              'Primary',
+                              'Principal',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 color: Colors.white.withOpacity(0.8),
                               ),
@@ -90,13 +91,13 @@ class WalletPage extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'JOHN DOE',
+                              'JOÃO DA SILVA',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: Colors.white,
                               ),
                             ),
                             Text(
-                              '12/25',
+                              '12/28',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: Colors.white,
                               ),
@@ -112,7 +113,7 @@ class WalletPage extends StatelessWidget {
                 .slideY(begin: 0.2, curve: Curves.easeOutBack),
             const SizedBox(height: 32),
             Text(
-              'Payment Methods',
+              'Métodos de Pagamento',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -121,13 +122,17 @@ class WalletPage extends StatelessWidget {
             ...provider.paymentMethods.asMap().entries.map((entry) {
               final index = entry.key;
               final method = entry.value;
+              
+              String methodName = method.name;
+              if (methodName == 'Cash') methodName = 'Dinheiro';
+              
               return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: method.color.withOpacity(0.1),
                       child: Icon(method.icon, color: method.color),
                     ),
                     title: Text(
-                      method.name,
+                      methodName,
                       style: theme.textTheme.titleMedium,
                     ),
                     subtitle: method.details != null

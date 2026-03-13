@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../theme.dart';
 
 class GradientButton extends StatelessWidget {
   final String text;
@@ -21,13 +22,13 @@ class GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final primary = startColor ?? theme.colorScheme.primary;
-    final secondary = endColor ?? theme.colorScheme.tertiary;
+    final secondary = endColor ?? theme.colorScheme.secondary;
 
     return Container(
       width: double.infinity,
-      height: 56,
+      height: 58,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         gradient: LinearGradient(
           colors: [primary, secondary],
           begin: Alignment.topLeft,
@@ -35,9 +36,9 @@ class GradientButton extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.3),
+            color: primary.withValues(alpha: 0.3),
             blurRadius: 12,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -45,7 +46,7 @@ class GradientButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: isLoading ? null : onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           child: Center(
             child: isLoading
                 ? const SizedBox(
@@ -53,15 +54,16 @@ class GradientButton extends StatelessWidget {
                     height: 24,
                     child: CircularProgressIndicator(
                       color: Colors.white,
-                      strokeWidth: 2,
+                      strokeWidth: 2.5,
                     ),
                   )
                 : Text(
                     text,
                     style: GoogleFonts.lexend(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
+                      letterSpacing: 0.5,
                     ),
                   ),
           ),

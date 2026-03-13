@@ -1,15 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:parking_br/models/vehicle.dart';
 import 'package:parking_br/screens/check_in_page.dart';
 import 'package:parking_br/screens/home_page.dart';
+import 'package:parking_br/screens/login_page.dart';
+import 'package:parking_br/screens/register_page.dart';
 import 'package:parking_br/screens/settings_page.dart';
 import 'package:parking_br/screens/ticket_details_page.dart';
 import 'package:parking_br/screens/wallet_page.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: AppRoutes.home,
+    initialLocation: AppRoutes.login,
     routes: [
+      GoRoute(
+        path: AppRoutes.login,
+        name: 'login',
+        builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        name: 'register',
+        builder: (context, state) => const RegisterPage(),
+      ),
       GoRoute(
         path: AppRoutes.home,
         name: 'home',
@@ -19,8 +32,10 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.checkIn,
         name: 'check-in',
-        pageBuilder: (context, state) =>
-            const NoTransitionPage(child: CheckInPage()),
+        pageBuilder: (context, state) {
+          final vehicle = state.extra as Vehicle?;
+          return NoTransitionPage(child: CheckInPage(vehicleToEdit: vehicle));
+        },
       ),
       GoRoute(
         path: AppRoutes.ticketDetails,
@@ -63,6 +78,8 @@ class AppRouter {
 
 class AppRoutes {
   AppRoutes._();
+  static const String login = '/login';
+  static const String register = '/register';
   static const String home = '/';
   static const String checkIn = '/check-in';
   static const String ticketDetails = '/ticket/:id';

@@ -5,6 +5,7 @@ import 'package:parking_br/providers/settings_provider.dart';
 import 'package:parking_br/services/log_service.dart';
 import 'package:parking_br/theme.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   // Initialize log capture early
@@ -30,6 +31,14 @@ class MyApp extends StatelessWidget {
           darkTheme: darkTheme,
           themeMode: settings.themeMode,
           routerConfig: AppRouter.router,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('pt', 'BR'),
+          ],
         ),
       ),
     );

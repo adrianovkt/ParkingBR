@@ -9,7 +9,9 @@ import '../providers/parking_provider.dart';
 import '../widgets/gradient_button.dart';
 
 class CheckInPage extends StatefulWidget {
-  const CheckInPage({super.key});
+  final Vehicle? vehicleToEdit;
+
+  const CheckInPage({super.key, this.vehicleToEdit});
 
   @override
   State<CheckInPage> createState() => _CheckInPageState();
@@ -17,15 +19,26 @@ class CheckInPage extends StatefulWidget {
 
 class _CheckInPageState extends State<CheckInPage> {
   final _formKey = GlobalKey<FormState>();
-  final _plateController = TextEditingController();
-  final _modelController = TextEditingController();
-  final _colorController = TextEditingController();
-  final _ownerNameController = TextEditingController();
-  final _ownerCpfController = TextEditingController();
-  final _ownerContactController = TextEditingController();
+  late TextEditingController _plateController;
+  late TextEditingController _modelController;
+  late TextEditingController _colorController;
+  late TextEditingController _ownerNameController;
+  late TextEditingController _ownerCpfController;
+  late TextEditingController _ownerContactController;
   static const _uuid = Uuid();
 
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _plateController = TextEditingController(text: widget.vehicleToEdit?.plate);
+    _modelController = TextEditingController(text: widget.vehicleToEdit?.model);
+    _colorController = TextEditingController(text: widget.vehicleToEdit?.color);
+    _ownerNameController = TextEditingController(text: widget.vehicleToEdit?.ownerName);
+    _ownerCpfController = TextEditingController(text: widget.vehicleToEdit?.ownerCpf);
+    _ownerContactController = TextEditingController(text: widget.vehicleToEdit?.ownerContact);
+  }
 
   @override
   void dispose() {
@@ -44,36 +57,55 @@ class _CheckInPageState extends State<CheckInPage> {
 
       try {
         final provider = Provider.of<ParkingProvider>(context, listen: false);
-        final vehicle = Vehicle(
-          id: _uuid.v4(),
-          plate: _plateController.text.toUpperCase(),
-          model: _modelController.text,
-          color: _colorController.text,
-          ownerName: _ownerNameController.text,
-          ownerCpf: _ownerCpfController.text,
-          ownerContact: _ownerContactController.text,
-        );
-
-        provider.addVehicle(vehicle);
-        provider.checkIn(vehicle.id);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              content: Text('Vehicle ${vehicle.plate} checked in!'),
-            ),
+        
+        if (widget.vehicleToEdit != null) {
+          final updatedVehicle = widget.vehicleToEdit!.copyWith(
+            plate: _plateController.text.toUpperCase(),
+            model: _modelController.text,
+            color: _colorController.text,
+            ownerName: _ownerNameController.text,
+            ownerCpf: _ownerCpfController.text,
+            ownerContact: _ownerContactController.text,
           );
-          context.pop();
+          provider.updateVehicle(updatedVehicle);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Veículo atualizado com sucesso!')),
+            );
+            context.pop();
+          }
+        } else {
+          final vehicle = Vehicle(
+            id: _uuid.v4(),
+            plate: _plateController.text.toUpperCase(),
+            model: _modelController.text,
+            color: _colorController.text,
+            ownerName: _ownerNameController.text,
+            ownerCpf: _ownerCpfController.text,
+            ownerContact: _ownerContactController.text,
+          );
+
+          provider.addVehicle(vehicle);
+          provider.checkIn(vehicle.id);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                content: Text('Veículo ${vehicle.plate} registrado e em pátio!'),
+              ),
+            );
+            context.pop();
+          }
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+          ).showSnackBar(SnackBar(content: Text('Erro: $e')));
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -84,9 +116,14 @@ class _CheckInPageState extends State<CheckInPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final provider = Provider.of<ParkingProvider>(context, listen: false);
+    final isEditing = widget.vehicleToEdit != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('New Check-In'), centerTitle: true),
+      appBar: AppBar(
+        title: Text(isEditing ? 'Editar Veículo' : 'Novo Check-In'),
+        centerTitle: true,
+      ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -96,7 +133,7 @@ class _CheckInPageState extends State<CheckInPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Vehicle Details',
+                'Detalhes do Veículo',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.primary,
@@ -107,10 +144,10 @@ class _CheckInPageState extends State<CheckInPage> {
                 index: 0,
                 child: _buildTextField(
                   controller: _plateController,
-                  label: 'License Plate',
+                  label: 'Placa',
                   hint: 'ABC-1234',
                   icon: Icons.directions_car,
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                 ),
               ),
               const SizedBox(height: 16),
@@ -121,10 +158,10 @@ class _CheckInPageState extends State<CheckInPage> {
                       index: 1,
                       child: _buildTextField(
                         controller: _modelController,
-                        label: 'Model',
+                        label: 'Modelo',
                         hint: 'Honda Civic',
                         icon: Icons.airport_shuttle,
-                        validator: (v) => v!.isEmpty ? 'Required' : null,
+                        validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                       ),
                     ),
                   ),
@@ -134,10 +171,10 @@ class _CheckInPageState extends State<CheckInPage> {
                       index: 2,
                       child: _buildTextField(
                         controller: _colorController,
-                        label: 'Color',
-                        hint: 'Silver',
+                        label: 'Cor',
+                        hint: 'Prata',
                         icon: Icons.color_lens,
-                        validator: (v) => v!.isEmpty ? 'Required' : null,
+                        validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                       ),
                     ),
                   ),
@@ -145,7 +182,7 @@ class _CheckInPageState extends State<CheckInPage> {
               ),
               const SizedBox(height: 32),
               Text(
-                'Owner Information',
+                'Informações do Proprietário',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.primary,
@@ -157,10 +194,10 @@ class _CheckInPageState extends State<CheckInPage> {
                 delay: 400.milliseconds,
                 child: _buildTextField(
                   controller: _ownerNameController,
-                  label: 'Full Name',
-                  hint: 'John Doe',
+                  label: 'Nome Completo',
+                  hint: 'João Silva',
                   icon: Icons.person,
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                 ),
               ),
               const SizedBox(height: 16),
@@ -173,7 +210,7 @@ class _CheckInPageState extends State<CheckInPage> {
                   hint: '000.000.000-00',
                   keyboardType: TextInputType.number,
                   icon: Icons.badge,
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                 ),
               ),
               const SizedBox(height: 16),
@@ -182,22 +219,56 @@ class _CheckInPageState extends State<CheckInPage> {
                 delay: 500.milliseconds,
                 child: _buildTextField(
                   controller: _ownerContactController,
-                  label: 'Contact (Phone)',
+                  label: 'Contato (Telefone)',
                   hint: '(00) 00000-0000',
                   keyboardType: TextInputType.phone,
                   icon: Icons.phone,
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                 ),
               ),
               const SizedBox(height: 40),
               GradientButton(
-                    text: 'Check In Vehicle',
+                    text: isEditing ? 'Salvar Alterações' : 'Realizar Check-In',
                     onTap: _submit,
                     isLoading: _isLoading,
                   )
                   .animate()
                   .fadeIn(delay: 600.milliseconds)
                   .scale(curve: Curves.easeOutBack),
+              if (isEditing) ...[
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Excluir Veículo?'),
+                        content: const Text('Esta ação não pode ser desfeita e removerá o veículo permanentemente.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              provider.deleteVehicle(widget.vehicleToEdit!.id);
+                              Navigator.pop(context);
+                              context.pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Veículo excluído com sucesso.')),
+                              );
+                            },
+                            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: const Center(
+                    child: Text('Excluir Veículo', style: TextStyle(color: Colors.red)),
+                  ),
+                ).animate().fadeIn(delay: 800.milliseconds),
+              ],
             ],
           ),
         ),

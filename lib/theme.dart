@@ -150,7 +150,6 @@ ThemeData get lightTheme => ThemeData(
       borderRadius: BorderRadius.circular(AppRadius.md),
     ),
     color: AppColors.lightSurface,
-    margin: EdgeInsets.zero,
   ),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
@@ -213,7 +212,6 @@ ThemeData get darkTheme => ThemeData(
       borderRadius: BorderRadius.circular(AppRadius.md),
     ),
     color: AppColors.darkSurface,
-    margin: EdgeInsets.zero,
   ),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,

@@ -39,4 +39,24 @@ class Ticket {
     final endTime = exitTime ?? DateTime.now();
     return endTime.difference(entryTime);
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'vehicleId': vehicleId,
+        'entryTime': entryTime.toIso8601String(),
+        'exitTime': exitTime?.toIso8601String(),
+        'status': status.name,
+        'paidAmount': paidAmount,
+        'paymentMethodId': paymentMethodId,
+      };
+
+  factory Ticket.fromJson(Map<String, dynamic> json) => Ticket(
+        id: json['id'],
+        vehicleId: json['vehicleId'],
+        entryTime: DateTime.parse(json['entryTime']),
+        exitTime: json['exitTime'] != null ? DateTime.parse(json['exitTime']) : null,
+        status: TicketStatus.values.byName(json['status']),
+        paidAmount: (json['paidAmount'] as num).toDouble(),
+        paymentMethodId: json['paymentMethodId'],
+      );
 }
