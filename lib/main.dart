@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
-  // Initialize log capture early
+  // Inicialização do sistema de logs
   LogService.I.init();
   runApp(const MyApp());
 }

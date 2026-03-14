@@ -19,6 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _isLoading = false;
 
+  // Realiza o processo de login
   Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -56,6 +57,7 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Stack(
         children: [
+          // Elemento decorativo de fundo
           Positioned(
             top: -100,
             right: -100,
@@ -64,7 +66,7 @@ class _LoginPageState extends State<LoginPage> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: theme.colorScheme.primary.withOpacity(0.1),
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
               ),
             ).animate().scale(duration: 2.seconds, curve: Curves.easeInOut).fadeIn(),
           ),
@@ -97,6 +99,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ).animate().fadeIn(delay: 400.milliseconds),
                   const SizedBox(height: 48),
+                  // Campos de entrada de texto
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -129,12 +132,14 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ).animate().fadeIn(delay: 900.milliseconds),
                   const SizedBox(height: 32),
+                  // Botão de ação principal
                   GradientButton(
                     text: 'Entrar',
                     isLoading: _isLoading,
                     onTap: _handleLogin,
                   ).animate().fadeIn(delay: 1.seconds).scale(),
                   const SizedBox(height: 24),
+                  // Navegação para registro
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

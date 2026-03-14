@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -20,13 +19,13 @@ class SettingsProvider extends ChangeNotifier {
     _init();
   }
 
+  // Inicializa as configurações e o usuário logado
   Future<void> _init() async {
     _loading = true;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Load Theme
       final tm = prefs.getString(_prefsKeyThemeMode);
       if (tm != null) {
         _themeMode = switch (tm) {
@@ -36,16 +35,16 @@ class SettingsProvider extends ChangeNotifier {
         };
       }
 
-      // Load User
       _user = await AuthService.I.getCurrentUser();
     } catch (e) {
-      debugPrint('Settings init failed: $e');
+      debugPrint('Erro na inicialização: $e');
     } finally {
       _loading = false;
       notifyListeners();
     }
   }
 
+  // Autentica o usuário
   Future<void> login(String email, String password) async {
     _loading = true;
     notifyListeners();
@@ -57,6 +56,7 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
+  // Registra um novo usuário
   Future<void> register({
     required String name,
     required String email,
@@ -78,12 +78,14 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
+  // Encerra a sessão do usuário
   Future<void> logout() async {
     await AuthService.I.logout();
     _user = null;
     notifyListeners();
   }
 
+  // Altera o tema do aplicativo
   Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
     notifyListeners();
@@ -96,13 +98,13 @@ class SettingsProvider extends ChangeNotifier {
       };
       await prefs.setString(_prefsKeyThemeMode, value);
     } catch (e) {
-      debugPrint('Failed to persist theme mode: $e');
+      debugPrint('Erro ao persistir tema: $e');
     }
   }
 
+  // Atualiza os dados do usuário
   Future<void> updateUser(AppUser newUser) async {
     _user = newUser.copyWith(updatedAt: DateTime.now());
     notifyListeners();
-    // In a real app, we'd update AuthService/Backend too
   }
 }

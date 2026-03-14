@@ -26,6 +26,7 @@ class ParkingProvider extends ChangeNotifier {
   List<PaymentMethod> get paymentMethods => List.unmodifiable(_paymentMethods);
   bool get initialized => _initialized;
 
+  // Inicializa os dados do provedor
   Future<void> _init() async {
     await _loadFromPrefs();
     _loadPaymentMethods();
@@ -33,6 +34,7 @@ class ParkingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Carrega veículos e tickets salvos localmente
   Future<void> _loadFromPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -54,26 +56,29 @@ class ParkingProvider extends ChangeNotifier {
         await _saveToPrefs();
       }
     } catch (e) {
-      debugPrint('Error loading parking data: $e');
+      debugPrint('Erro ao carregar dados: $e');
     }
   }
 
+  // Salva os dados atuais no armazenamento local
   Future<void> _saveToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyVehicles, jsonEncode(_vehicles.map((v) => v.toJson()).toList()));
       await prefs.setString(_keyTickets, jsonEncode(_tickets.map((t) => t.toJson()).toList()));
     } catch (e) {
-      debugPrint('Error saving parking data: $e');
+      debugPrint('Erro ao salvar dados: $e');
     }
   }
 
+  // Adiciona um novo veículo
   Future<void> addVehicle(Vehicle vehicle) async {
     _vehicles.add(vehicle);
     notifyListeners();
     await _saveToPrefs();
   }
 
+  // Atualiza informações de um veículo existente
   Future<void> updateVehicle(Vehicle updatedVehicle) async {
     final index = _vehicles.indexWhere((v) => v.id == updatedVehicle.id);
     if (index != -1) {
@@ -83,6 +88,7 @@ class ParkingProvider extends ChangeNotifier {
     }
   }
 
+  // Remove um veículo e seus tickets ativos
   Future<void> deleteVehicle(String vehicleId) async {
     _vehicles.removeWhere((v) => v.id == vehicleId);
     _tickets.removeWhere((t) => t.vehicleId == vehicleId && t.status == TicketStatus.active);
@@ -98,6 +104,7 @@ class ParkingProvider extends ChangeNotifier {
     }
   }
 
+  // Realiza o check-in de um veículo
   Future<Ticket> checkIn(String vehicleId) async {
     final existing = getActiveTicketForVehicle(vehicleId);
     if (existing != null) return existing;
@@ -114,6 +121,7 @@ class ParkingProvider extends ChangeNotifier {
     return ticket;
   }
 
+  // Realiza o check-out e registra o pagamento
   Future<void> checkOut(String ticketId, String paymentMethodId) async {
     final ticketIndex = _tickets.indexWhere((t) => t.id == ticketId);
     if (ticketIndex != -1) {
@@ -142,6 +150,7 @@ class ParkingProvider extends ChangeNotifier {
     }
   }
 
+  // Define os métodos de pagamento disponíveis
   void _loadPaymentMethods() {
     _paymentMethods.clear();
     _paymentMethods.addAll([
@@ -178,6 +187,7 @@ class ParkingProvider extends ChangeNotifier {
     ]);
   }
 
+  // Carrega dados iniciais de exemplo
   void _loadDummyData() {
     final v1 = Vehicle(
       id: _uuid.v4(),
