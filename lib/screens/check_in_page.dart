@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/vehicle.dart';
 import '../providers/parking_provider.dart';
-import '../widgets/gradient_button.dart';
+import '../providers/settings_provider.dart';
+import '../utils/plate_validator.dart';
 
 class CheckInPage extends StatefulWidget {
   final Vehicle? vehicleToEdit;
@@ -18,26 +19,35 @@ class CheckInPage extends StatefulWidget {
 }
 
 class _CheckInPageState extends State<CheckInPage> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _plateController;
-  late TextEditingController _modelController;
-  late TextEditingController _colorController;
-  late TextEditingController _ownerNameController;
-  late TextEditingController _ownerCpfController;
-  late TextEditingController _ownerContactController;
   static const _uuid = Uuid();
 
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _plateController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _colorController;
+  late final TextEditingController _ownerNameController;
+  late final TextEditingController _ownerCpfController;
+  late final TextEditingController _ownerContactController;
   bool _isLoading = false;
+
+  bool get _isEditing => widget.vehicleToEdit != null;
 
   @override
   void initState() {
     super.initState();
-    _plateController = TextEditingController(text: widget.vehicleToEdit?.plate);
-    _modelController = TextEditingController(text: widget.vehicleToEdit?.model);
-    _colorController = TextEditingController(text: widget.vehicleToEdit?.color);
-    _ownerNameController = TextEditingController(text: widget.vehicleToEdit?.ownerName);
-    _ownerCpfController = TextEditingController(text: widget.vehicleToEdit?.ownerCpf);
-    _ownerContactController = TextEditingController(text: widget.vehicleToEdit?.ownerContact);
+    final vehicle = widget.vehicleToEdit;
+    _plateController = TextEditingController(
+      text: vehicle == null ? '' : PlateValidator.format(vehicle.plate),
+    );
+    _modelController = TextEditingController(text: vehicle?.model ?? '');
+    _colorController = TextEditingController(text: vehicle?.color ?? '');
+    _ownerNameController = TextEditingController(
+      text: vehicle?.ownerName ?? '',
+    );
+    _ownerCpfController = TextEditingController(text: vehicle?.ownerCpf ?? '');
+    _ownerContactController = TextEditingController(
+      text: vehicle?.ownerContact ?? '',
+    );
   }
 
   @override
@@ -51,260 +61,240 @@ class _CheckInPageState extends State<CheckInPage> {
     super.dispose();
   }
 
-  void _submit() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+  Future<void> _submit() async {
+    if (_isLoading || !_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    final vehicle = Vehicle(
+      id: widget.vehicleToEdit?.id ?? _uuid.v4(),
+      plate: PlateValidator.canonical(_plateController.text),
+      model: _modelController.text.trim(),
+      color: _colorController.text.trim(),
+      ownerName: _ownerNameController.text.trim(),
+      ownerCpf: _ownerCpfController.text.trim(),
+      ownerContact: _ownerContactController.text.trim(),
+    );
 
-      try {
-        final provider = Provider.of<ParkingProvider>(context, listen: false);
-        
-        if (widget.vehicleToEdit != null) {
-          final updatedVehicle = widget.vehicleToEdit!.copyWith(
-            plate: _plateController.text.toUpperCase(),
-            model: _modelController.text,
-            color: _colorController.text,
-            ownerName: _ownerNameController.text,
-            ownerCpf: _ownerCpfController.text,
-            ownerContact: _ownerContactController.text,
-          );
-          provider.updateVehicle(updatedVehicle);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Veículo atualizado com sucesso!')),
-            );
-            context.pop();
-          }
-        } else {
-          final vehicle = Vehicle(
-            id: _uuid.v4(),
-            plate: _plateController.text.toUpperCase(),
-            model: _modelController.text,
-            color: _colorController.text,
-            ownerName: _ownerNameController.text,
-            ownerCpf: _ownerCpfController.text,
-            ownerContact: _ownerContactController.text,
-          );
-
-          provider.addVehicle(vehicle);
-          provider.checkIn(vehicle.id);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                content: Text('Veículo ${vehicle.plate} registrado e em pátio!'),
-              ),
-            );
-            context.pop();
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Erro: $e')));
-        }
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
+    try {
+      final parking = context.read<ParkingProvider>();
+      if (_isEditing) {
+        await parking.updateVehicle(vehicle);
+      } else {
+        await parking.registerEntry(
+          vehicle: vehicle,
+          pricing: context.read<SettingsProvider>().pricing,
+        );
       }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      context.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            _isEditing
+                ? 'Veículo atualizado'
+                : 'Entrada de ${PlateValidator.format(vehicle.plate)} registrada',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _archive() async {
+    if (_isLoading || widget.vehicleToEdit == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Arquivar veículo?'),
+        content: const Text(
+          'O cadastro sairá da lista, mas todo o histórico será preservado.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Arquivar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await context.read<ParkingProvider>().archiveVehicle(
+        widget.vehicleToEdit!.id,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      context.pop();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Veículo arquivado')),
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final provider = Provider.of<ParkingProvider>(context, listen: false);
-    final isEditing = widget.vehicleToEdit != null;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing ? 'Editar Veículo' : 'Novo Check-In'),
-        centerTitle: true,
+        title: Text(_isEditing ? 'Editar veículo' : 'Registrar entrada'),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Detalhes do Veículo',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                ),
-              ).animate().fadeIn().slideX(begin: -0.1),
-              const SizedBox(height: 16),
-              _buildAnimatedField(
-                index: 0,
-                child: _buildTextField(
-                  controller: _plateController,
-                  label: 'Placa',
-                  hint: 'ABC-1234',
-                  icon: Icons.directions_car,
-                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildAnimatedField(
-                      index: 1,
-                      child: _buildTextField(
-                        controller: _modelController,
-                        label: 'Modelo',
-                        hint: 'Honda Civic',
-                        icon: Icons.airport_shuttle,
-                        validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildAnimatedField(
-                      index: 2,
-                      child: _buildTextField(
-                        controller: _colorController,
-                        label: 'Cor',
-                        hint: 'Prata',
-                        icon: Icons.color_lens,
-                        validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'Informações do Proprietário',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                ),
-              ).animate().fadeIn(delay: 300.milliseconds).slideX(begin: -0.1),
-              const SizedBox(height: 16),
-              _buildAnimatedField(
-                index: 3,
-                delay: 400.milliseconds,
-                child: _buildTextField(
-                  controller: _ownerNameController,
-                  label: 'Nome Completo',
-                  hint: 'João Silva',
-                  icon: Icons.person,
-                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildAnimatedField(
-                index: 4,
-                delay: 450.milliseconds,
-                child: _buildTextField(
-                  controller: _ownerCpfController,
-                  label: 'CPF',
-                  hint: '000.000.000-00',
-                  keyboardType: TextInputType.number,
-                  icon: Icons.badge,
-                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildAnimatedField(
-                index: 5,
-                delay: 500.milliseconds,
-                child: _buildTextField(
-                  controller: _ownerContactController,
-                  label: 'Contato (Telefone)',
-                  hint: '(00) 00000-0000',
-                  keyboardType: TextInputType.phone,
-                  icon: Icons.phone,
-                  validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                ),
-              ),
-              const SizedBox(height: 40),
-              GradientButton(
-                    text: isEditing ? 'Salvar Alterações' : 'Realizar Check-In',
-                    onTap: _submit,
-                    isLoading: _isLoading,
-                  )
-                  .animate()
-                  .fadeIn(delay: 600.milliseconds)
-                  .scale(curve: Curves.easeOutBack),
-              if (isEditing) ...[
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Excluir Veículo?'),
-                        content: const Text('Esta ação não pode ser desfeita e removerá o veículo permanentemente.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancelar'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              provider.deleteVehicle(widget.vehicleToEdit!.id);
-                              Navigator.pop(context);
-                              context.pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Veículo excluído com sucesso.')),
-                              );
-                            },
-                            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: const Center(
-                    child: Text('Excluir Veículo', style: TextStyle(color: Colors.red)),
-                  ),
-                ).animate().fadeIn(delay: 800.milliseconds),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Text(
+              'Identificação',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _plateController,
+              autofocus: !_isEditing,
+              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9-]')),
+                LengthLimitingTextInputFormatter(8),
               ],
+              decoration: const InputDecoration(
+                labelText: 'Placa',
+                hintText: 'ABC-1234 ou ABC1D23',
+                prefixIcon: Icon(Icons.pin_outlined),
+              ),
+              validator: (value) {
+                if (PlateValidator.identify(value?.trim() ?? '') ==
+                    PlateType.invalid) {
+                  return 'Informe uma placa válida';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    children: [
+                      _modelField(),
+                      const SizedBox(height: 16),
+                      _colorField(),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: _modelField()),
+                    const SizedBox(width: 12),
+                    Expanded(child: _colorField()),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 28),
+            Text(
+              'Proprietário (opcional)',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _ownerNameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Nome',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _ownerCpfController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'CPF',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _ownerContactController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Contato',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _submit,
+              icon: _isLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _isEditing ? Icons.save_outlined : Icons.login_rounded,
+                    ),
+              label: Text(
+                _isEditing ? 'Salvar alterações' : 'Registrar entrada',
+              ),
+            ),
+            if (_isEditing) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _isLoading ? null : _archive,
+                icon: const Icon(Icons.archive_outlined),
+                label: const Text('Arquivar veículo'),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildAnimatedField({
-    required Widget child,
-    required int index,
-    Duration delay = Duration.zero,
-  }) {
-    return child
-        .animate()
-        .fadeIn(delay: delay + (index * 50).milliseconds)
-        .slideY(begin: 0.1, curve: Curves.easeOutQuad);
+  String _message(Object error) => error.toString().replaceFirst(
+    RegExp(r'^(Bad state|Invalid argument): '),
+    '',
+  );
+
+  Widget _modelField() {
+    return TextFormField(
+      controller: _modelController,
+      textCapitalization: TextCapitalization.words,
+      decoration: const InputDecoration(
+        labelText: 'Modelo (opcional)',
+        prefixIcon: Icon(Icons.directions_car_outlined),
+      ),
+    );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
+  Widget _colorField() {
     return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon),
+      controller: _colorController,
+      textCapitalization: TextCapitalization.words,
+      decoration: const InputDecoration(
+        labelText: 'Cor (opcional)',
+        prefixIcon: Icon(Icons.palette_outlined),
       ),
-      keyboardType: keyboardType,
-      validator: validator,
-      textCapitalization: TextCapitalization.sentences,
     );
   }
 }

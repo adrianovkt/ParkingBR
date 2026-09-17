@@ -1,393 +1,380 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:parking_br/models/ticket.dart';
-import 'package:parking_br/models/vehicle.dart';
-import 'package:parking_br/providers/parking_provider.dart';
-import 'package:parking_br/theme.dart';
-import 'package:parking_br/widgets/vehicle_card.dart';
 import 'package:provider/provider.dart';
 
-class HomePage extends StatelessWidget {
+import '../models/ticket.dart';
+import '../models/vehicle.dart';
+import '../providers/parking_provider.dart';
+import '../providers/settings_provider.dart';
+import '../utils/plate_validator.dart';
+import '../widgets/vehicle_card.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _searchController = TextEditingController();
+  Timer? _timer;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final provider = Provider.of<ParkingProvider>(context);
-    final vehicles = provider.vehicles;
-    final activeTickets = provider.tickets
-        .where((t) => t.status == TicketStatus.active)
-        .toList();
+    final parking = context.watch<ParkingProvider>();
+    final settings = context.watch<SettingsProvider>();
+    if (parking.loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (parking.initializationError != null) {
+      return _InitializationError(
+        message: parking.initializationError!,
+        onRetry: parking.retryInitialization,
+      );
+    }
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            theme.brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor: theme.colorScheme.surface,
-        systemNavigationBarIconBrightness:
-            theme.brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+    final visibleVehicles = _visibleVehicles(parking);
+    return Scaffold(
+      appBar: AppBar(title: Text(settings.parkingName)),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/check-in'),
+        icon: const Icon(Icons.login_rounded),
+        label: const Text('Registrar entrada'),
       ),
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) async {
-          if (didPop) return;
-          _showExitDialog(context);
-        },
-        child: Scaffold(
-          backgroundColor: theme.colorScheme.surface,
-          appBar: AppBar(
-            title: Text(
-              'Parking BR',
-              style: GoogleFonts.lexend(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: theme.colorScheme.onSurface,
+      body: RefreshIndicator(
+        onRefresh: parking.retryInitialization,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: _StatusCard(
+                  activeCount: parking.activeTickets.length,
+                  completedToday: _completedToday(parking.completedTickets),
+                ),
               ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.wallet),
-                tooltip: 'Carteira',
-                onPressed: () => context.push('/wallet'),
-              ).animate().fadeIn(delay: 200.milliseconds).scale(),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                tooltip: 'Configurações',
-                onPressed: () => context.push('/settings'),
-              ).animate().fadeIn(delay: 300.milliseconds).scale(),
-            ],
-            centerTitle: false,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            systemOverlayStyle: SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              statusBarIconBrightness:
-                  theme.brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-            ),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => context.push('/check-in'),
-            icon: const Icon(Icons.add),
-            label: const Text('Novo Veículo'),
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: theme.colorScheme.onPrimary,
-          ).animate().scale(delay: 400.milliseconds, curve: Curves.easeOutBack),
-          body: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildStatsHeader(context, activeTickets),
-                const SizedBox(height: AppSpacing.lg),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Veículos Estacionados',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+              sliver: SliverToBoxAdapter(
+                child: SearchBar(
+                  controller: _searchController,
+                  hintText: 'Buscar placa, modelo ou proprietário',
+                  leading: const Icon(Icons.search_rounded),
+                  trailing: [
+                    if (_query.isNotEmpty)
+                      IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
                       ),
-                    ).animate().fadeIn(delay: 500.milliseconds).slideX(begin: -0.2),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text('Ver Tudo'),
-                    ).animate().fadeIn(delay: 600.milliseconds),
                   ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (vehicles.isEmpty)
-                  _buildEmptyState(context)
-                else
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: vehicles.length,
-                    itemBuilder: (context, index) {
-                      final vehicle = vehicles[index];
-                      final ticket = provider.getActiveTicketForVehicle(vehicle.id);
-                      return VehicleCard(
-                            vehicle: vehicle,
-                            activeTicket: ticket,
-                            onTap: () {
-                              if (ticket != null) {
-                                context.push('/ticket/${ticket.id}');
-                              } else {
-                                _showActionSheet(context, vehicle);
-                              }
-                            },
-                          )
-                          .animate(delay: (100 * index + 600).milliseconds)
-                          .fadeIn(duration: 500.milliseconds)
-                          .slideY(begin: 0.2, curve: Curves.easeOutQuad);
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsHeader(BuildContext context, List<Ticket> activeTickets) {
-    final theme = Theme.of(context);
-    return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Status Atual',
-                style: GoogleFonts.lexend(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  fontSize: 14,
+                  onChanged: (value) {
+                    setState(() => _query = value.trim().toUpperCase());
+                  },
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${activeTickets.length}',
-                        style: GoogleFonts.lexend(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ).animate().shimmer(
-                        delay: 1.seconds,
-                        duration: 2.seconds,
-                      ),
-                      Text(
-                        'Veículos no Pátio',
-                        style: GoogleFonts.lexend(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                        ),
-                        child: const Icon(
-                          Icons.local_parking,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      )
-                      .animate(
-                        onPlay: (controller) =>
-                            controller.repeat(reverse: true),
-                      )
-                      .scale(
-                        begin: const Offset(1, 1),
-                        end: const Offset(1.1, 1.1),
-                        duration: 1.seconds,
-                        curve: Curves.easeInOut,
-                      ),
-                ],
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  _query.isEmpty ? 'Veículos no pátio' : 'Resultado da busca',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
               ),
-            ],
-          ),
-        )
-        .animate()
-        .fadeIn(duration: 600.milliseconds)
-        .scale(begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack);
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        children: [
-          Icon(
-                Icons.directions_car_outlined,
-                size: 64,
-                color: Theme.of(context).colorScheme.outline,
+            ),
+            if (visibleVehicles.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(searching: _query.isNotEmpty),
               )
-              .animate(onPlay: (controller) => controller.repeat())
-              .shake(hz: 2, duration: 2.seconds),
-          const SizedBox(height: 16),
-          Text(
-            'Nenhum veículo registrado.',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn();
-  }
-
-  void _showActionSheet(BuildContext context, Vehicle vehicle) {
-    final provider = Provider.of<ParkingProvider>(context, listen: false);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                sliver: SliverList.builder(
+                  itemCount: visibleVehicles.length,
+                  itemBuilder: (context, index) {
+                    final vehicle = visibleVehicles[index];
+                    final ticket = parking.getActiveTicketForVehicle(
+                      vehicle.id,
+                    );
+                    return VehicleCard(
+                      vehicle: vehicle,
+                      activeTicket: ticket,
+                      onTap: () {
+                        if (ticket != null) {
+                          context.push('/ticket/${ticket.id}');
+                        } else {
+                          _showVehicleActions(context, vehicle);
+                        }
+                      },
+                    );
+                  },
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Ações para ${vehicle.plate}',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-            ListTile(
-              leading: Icon(
-                Icons.login_rounded,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: const Text('Check-In (Entrada)'),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              onTap: () {
-                context.pop();
-                provider.checkIn(vehicle.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    content: Text('Veículo ${vehicle.plate} entrou no pátio!'),
-                  ),
-                );
-              },
-            ).animate().fadeIn(delay: 100.milliseconds).slideX(),
-            ListTile(
-              leading: const Icon(Icons.edit_rounded),
-              title: const Text('Editar Informações'),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              onTap: () {
-                context.pop();
-                context.push('/check-in', extra: vehicle);
-              },
-            ).animate().fadeIn(delay: 200.milliseconds).slideX(),
-             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-              title: const Text('Excluir Veículo', style: TextStyle(color: Colors.red)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              onTap: () {
-                context.pop();
-                _showDeleteDialog(context, vehicle);
-              },
-            ).animate().fadeIn(delay: 300.milliseconds).slideX(),
           ],
         ),
       ),
     );
   }
 
-  void _showDeleteDialog(BuildContext context, Vehicle vehicle) {
-    final provider = Provider.of<ParkingProvider>(context, listen: false);
-    showDialog(
+  List<Vehicle> _visibleVehicles(ParkingProvider parking) {
+    if (_query.isEmpty) {
+      final activeIds = parking.activeTickets
+          .map((ticket) => ticket.vehicleId)
+          .toSet();
+      return parking.vehicles
+          .where((vehicle) => activeIds.contains(vehicle.id))
+          .toList(growable: false);
+    }
+    final canonicalQuery = PlateValidator.canonical(_query);
+    return parking.vehicles
+        .where((vehicle) {
+          return vehicle.plate.contains(canonicalQuery) ||
+              vehicle.model.toUpperCase().contains(_query) ||
+              vehicle.ownerName.toUpperCase().contains(_query);
+        })
+        .toList(growable: false);
+  }
+
+  int _completedToday(List<Ticket> tickets) {
+    final now = DateTime.now();
+    return tickets.where((ticket) {
+      final exit = ticket.exitTime?.toLocal();
+      return exit != null &&
+          exit.year == now.year &&
+          exit.month == now.month &&
+          exit.day == now.day;
+    }).length;
+  }
+
+  Future<void> _showVehicleActions(
+    BuildContext context,
+    Vehicle vehicle,
+  ) async {
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir Veículo?'),
-        content: Text('Tem certeza que deseja remover o veículo ${vehicle.plate}? Esta ação não pode ser desfeita.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.login_rounded),
+                title: Text(
+                  'Registrar entrada de ${PlateValidator.format(vehicle.plate)}',
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _checkInExisting(context, vehicle);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Editar cadastro'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.push('/check-in', extra: vehicle);
+                },
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              provider.deleteVehicle(vehicle.id);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Veículo removido com sucesso.')),
-              );
-            },
-            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  void _showExitDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sair do App'),
-        content: const Text('O que você deseja fazer?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+  Future<void> _checkInExisting(BuildContext context, Vehicle vehicle) async {
+    try {
+      await context.read<ParkingProvider>().checkIn(
+        vehicle.id,
+        pricing: context.read<SettingsProvider>().pricing,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Entrada de ${PlateValidator.format(vehicle.plate)} registrada',
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Saindo... (Sessão mantida)')),
-              );
-            },
-            child: const Text('Apenas Sair'),
+        );
+      }
+    } on Object catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    }
+  }
+
+  String _message(Object error) => error.toString().replaceFirst(
+    RegExp(r'^(Bad state|Invalid argument): '),
+    '',
+  );
+}
+
+class _StatusCard extends StatelessWidget {
+  final int activeCount;
+  final int completedToday;
+
+  const _StatusCard({required this.activeCount, required this.completedToday});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Expanded(
+              child: _Metric(
+                value: activeCount.toString(),
+                label: 'no pátio',
+                icon: Icons.local_parking_rounded,
+              ),
+            ),
+            SizedBox(
+              height: 52,
+              child: VerticalDivider(color: colors.onPrimaryContainer),
+            ),
+            Expanded(
+              child: _Metric(
+                value: completedToday.toString(),
+                label: 'saídas hoje',
+                icon: Icons.logout_rounded,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Metric extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+
+  const _Metric({required this.value, required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon),
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(label, textAlign: TextAlign.center),
+      ],
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool searching;
+
+  const _EmptyState({required this.searching});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              searching
+                  ? Icons.search_off_rounded
+                  : Icons.directions_car_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              searching ? 'Nenhum veículo encontrado' : 'O pátio está vazio',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (!searching) ...[
+              const SizedBox(height: 8),
+              const Text('Use “Registrar entrada” para começar.'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InitializationError extends StatelessWidget {
+  final String message;
+  final Future<void> Function() onRetry;
+
+  const _InitializationError({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.storage_rounded, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                'Não foi possível abrir os dados locais',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Tentar novamente'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.go('/login');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Saindo e deslogando...')),
-              );
-            },
-            child: const Text('Sair e Deslogar', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+        ),
       ),
     );
   }

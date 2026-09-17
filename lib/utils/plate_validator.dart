@@ -1,14 +1,13 @@
-enum PlateType {
-  old,
-  mercosul,
-  invalid,
-}
+enum PlateType { old, mercosul, invalid }
 
 class PlateValidator {
+  static String canonical(String plate) {
+    return plate.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+  }
+
   static PlateType identify(String plate) {
-    // Remove espaços e hífens para validar a sequência bruta
-    final cleanPlate = plate.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
-    
+    final cleanPlate = canonical(plate);
+
     if (cleanPlate.length != 7) return PlateType.invalid;
 
     // Antiga (1990-2018): 3 letras e 4 números (ABC1234)
@@ -23,14 +22,14 @@ class PlateValidator {
   }
 
   static String format(String plate) {
-    final cleanPlate = plate.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+    final cleanPlate = canonical(plate);
     final type = identify(cleanPlate);
 
     if (type == PlateType.old && cleanPlate.length == 7) {
       // Formato LLL-NNNN
       return '${cleanPlate.substring(0, 3)}-${cleanPlate.substring(3)}';
     }
-    
+
     // Mercosul não usa hífen oficialmente na representação alfanumérica
     return cleanPlate;
   }

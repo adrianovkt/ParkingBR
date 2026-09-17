@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum PaymentType { creditCard, debitCard, pix, cash }
+enum PaymentType { cash, pix, card, free }
 
 class PaymentMethod {
   final String id;
@@ -8,14 +8,12 @@ class PaymentMethod {
   final PaymentType type;
   final IconData icon;
   final Color color;
-  final String? details; // e.g. "**** 1234"
 
-  PaymentMethod({
+  const PaymentMethod({
     required this.id,
     required this.name,
     required this.type,
     required this.icon,
     required this.color,
-    this.details,
   });
 }

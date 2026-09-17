@@ -1,76 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:parking_br/models/vehicle.dart';
-import 'package:parking_br/screens/check_in_page.dart';
-import 'package:parking_br/screens/home_page.dart';
-import 'package:parking_br/screens/login_page.dart';
-import 'package:parking_br/screens/register_page.dart';
-import 'package:parking_br/screens/settings_page.dart';
-import 'package:parking_br/screens/ticket_details_page.dart';
-import 'package:parking_br/screens/wallet_page.dart';
+
+import 'models/vehicle.dart';
+import 'screens/check_in_page.dart';
+import 'screens/history_page.dart';
+import 'screens/home_page.dart';
+import 'screens/settings_page.dart';
+import 'screens/ticket_details_page.dart';
+import 'widgets/operational_shell.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: AppRoutes.home,
     routes: [
-      GoRoute(
-        path: AppRoutes.login,
-        name: 'login',
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.register,
-        name: 'register',
-        builder: (context, state) => const RegisterPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.home,
-        name: 'home',
-        pageBuilder: (context, state) =>
-            const NoTransitionPage(child: HomePage()),
+      ShellRoute(
+        builder: (context, state, child) {
+          return OperationalShell(state: state, child: child);
+        },
+        routes: [
+          GoRoute(
+            path: AppRoutes.home,
+            name: 'home',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HomePage()),
+          ),
+          GoRoute(
+            path: AppRoutes.history,
+            name: 'history',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HistoryPage()),
+          ),
+          GoRoute(
+            path: AppRoutes.settings,
+            name: 'settings',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: SettingsPage()),
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.checkIn,
         name: 'check-in',
         pageBuilder: (context, state) {
-          final vehicle = state.extra as Vehicle?;
-          return NoTransitionPage(child: CheckInPage(vehicleToEdit: vehicle));
+          return MaterialPage(
+            child: CheckInPage(vehicleToEdit: state.extra as Vehicle?),
+          );
         },
       ),
       GoRoute(
         path: AppRoutes.ticketDetails,
         name: 'ticket-details',
         pageBuilder: (context, state) {
-          final ticketId = state.pathParameters['id']!;
-          return NoTransitionPage(child: TicketDetailsPage(ticketId: ticketId));
+          return MaterialPage(
+            child: TicketDetailsPage(ticketId: state.pathParameters['id']!),
+          );
         },
-      ),
-      GoRoute(
-        path: AppRoutes.wallet,
-        name: 'wallet',
-        pageBuilder: (context, state) =>
-            const NoTransitionPage(child: WalletPage()),
-      ),
-      GoRoute(
-        path: AppRoutes.settings,
-        name: 'settings',
-        pageBuilder: (context, state) => CustomTransitionPage<void>(
-          key: state.pageKey,
-          child: const SettingsPage(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final tween = Tween(
-              begin: const Offset(0, 0.03),
-              end: Offset.zero,
-            ).chain(CurveTween(curve: Curves.easeOutCubic));
-            return FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              ),
-            );
-          },
-        ),
       ),
     ],
   );
@@ -78,11 +62,10 @@ class AppRouter {
 
 class AppRoutes {
   AppRoutes._();
-  static const String login = '/login';
-  static const String register = '/register';
-  static const String home = '/';
-  static const String checkIn = '/check-in';
-  static const String ticketDetails = '/ticket/:id';
-  static const String wallet = '/wallet';
-  static const String settings = '/settings';
+
+  static const home = '/';
+  static const checkIn = '/check-in';
+  static const ticketDetails = '/ticket/:id';
+  static const history = '/history';
+  static const settings = '/settings';
 }

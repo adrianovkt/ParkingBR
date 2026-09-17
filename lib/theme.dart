@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppSpacing {
   static const double xs = 4.0;
@@ -55,10 +54,10 @@ extension TextStyleExtensions on TextStyle {
 }
 
 class AppColors {
-  static const lightPrimary = Color(0xFF6366F1);
+  static const lightPrimary = Color(0xFF1B5E4B);
   static const lightOnPrimary = Color(0xFFFFFFFF);
-  static const lightPrimaryContainer = Color(0xFFE0E7FF);
-  static const lightOnPrimaryContainer = Color(0xFF3730A3);
+  static const lightPrimaryContainer = Color(0xFFD6EADF);
+  static const lightOnPrimaryContainer = Color(0xFF0D3B2E);
 
   static const lightSecondary = Color(0xFF14B8A6);
   static const lightOnSecondary = Color(0xFFFFFFFF);
@@ -77,10 +76,10 @@ class AppColors {
   static const lightOnSurfaceVariant = Color(0xFF64748B);
   static const lightOutline = Color(0xFFCBD5E1);
 
-  static const darkPrimary = Color(0xFF818CF8);
-  static const darkOnPrimary = Color(0xFF312E81);
-  static const darkPrimaryContainer = Color(0xFF4338CA);
-  static const darkOnPrimaryContainer = Color(0xFFE0E7FF);
+  static const darkPrimary = Color(0xFF7DD8B6);
+  static const darkOnPrimary = Color(0xFF00382A);
+  static const darkPrimaryContainer = Color(0xFF15543F);
+  static const darkOnPrimaryContainer = Color(0xFFD6EADF);
 
   static const darkSecondary = Color(0xFF2DD4BF);
   static const darkOnSecondary = Color(0xFF134E4A);
@@ -244,60 +243,60 @@ ThemeData get darkTheme => ThemeData(
 );
 
 TextTheme _buildTextTheme() {
-  return TextTheme(
-    displayLarge: GoogleFonts.lexend(
+  return const TextTheme(
+    displayLarge: TextStyle(
       fontSize: FontSizes.displayLarge,
       fontWeight: FontWeight.bold,
     ),
-    displayMedium: GoogleFonts.lexend(
+    displayMedium: TextStyle(
       fontSize: FontSizes.displayMedium,
       fontWeight: FontWeight.bold,
     ),
-    displaySmall: GoogleFonts.lexend(
+    displaySmall: TextStyle(
       fontSize: FontSizes.displaySmall,
       fontWeight: FontWeight.w600,
     ),
-    headlineLarge: GoogleFonts.lexend(
+    headlineLarge: TextStyle(
       fontSize: FontSizes.headlineLarge,
       fontWeight: FontWeight.bold,
     ),
-    headlineMedium: GoogleFonts.lexend(
+    headlineMedium: TextStyle(
       fontSize: FontSizes.headlineMedium,
       fontWeight: FontWeight.w600,
     ),
-    headlineSmall: GoogleFonts.lexend(
+    headlineSmall: TextStyle(
       fontSize: FontSizes.headlineSmall,
       fontWeight: FontWeight.w600,
     ),
-    titleLarge: GoogleFonts.lexend(
+    titleLarge: TextStyle(
       fontSize: FontSizes.titleLarge,
       fontWeight: FontWeight.w600,
     ),
-    titleMedium: GoogleFonts.lexend(
+    titleMedium: TextStyle(
       fontSize: FontSizes.titleMedium,
       fontWeight: FontWeight.w500,
     ),
-    titleSmall: GoogleFonts.lexend(
+    titleSmall: TextStyle(
       fontSize: FontSizes.titleSmall,
       fontWeight: FontWeight.w500,
     ),
-    bodyLarge: GoogleFonts.inter(
+    bodyLarge: TextStyle(
       fontSize: FontSizes.bodyLarge,
       fontWeight: FontWeight.w400,
     ),
-    bodyMedium: GoogleFonts.inter(
+    bodyMedium: TextStyle(
       fontSize: FontSizes.bodyMedium,
       fontWeight: FontWeight.w400,
     ),
-    bodySmall: GoogleFonts.inter(
+    bodySmall: TextStyle(
       fontSize: FontSizes.bodySmall,
       fontWeight: FontWeight.w400,
     ),
-    labelLarge: GoogleFonts.inter(
+    labelLarge: TextStyle(
       fontSize: FontSizes.labelLarge,
       fontWeight: FontWeight.w500,
     ),
-    labelSmall: GoogleFonts.inter(
+    labelSmall: TextStyle(
       fontSize: FontSizes.labelSmall,
       fontWeight: FontWeight.w500,
     ),
