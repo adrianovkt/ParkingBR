@@ -1,110 +1,113 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/user.dart';
-import '../services/auth_service.dart';
+
+import '../features/parking/domain/pricing.dart';
 
 class SettingsProvider extends ChangeNotifier {
-  static const _prefsKeyThemeMode = 'settings.themeMode';
+  static const _themeKey = 'settings.themeMode';
+  static const _parkingNameKey = 'settings.parkingName';
+  static const _graceSecondsKey = 'settings.graceSeconds';
+  static const _firstHourCentsKey = 'settings.firstHourCents';
+  static const _extraHourCentsKey = 'settings.extraHourCents';
 
   ThemeMode _themeMode = ThemeMode.system;
-  ThemeMode get themeMode => _themeMode;
-
-  AppUser? _user;
-  AppUser? get user => _user;
-
-  bool _loading = false;
-  bool get loading => _loading;
+  String _parkingName = 'Parking BR';
+  int _graceSeconds = 15 * 60;
+  int _firstHourCents = 1000;
+  int _extraHourCents = 500;
+  bool _initialized = false;
 
   SettingsProvider() {
-    _init();
+    _initialize();
   }
 
-  // Inicializa as configurações e o usuário logado
-  Future<void> _init() async {
-    _loading = true;
-    notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      final tm = prefs.getString(_prefsKeyThemeMode);
-      if (tm != null) {
-        _themeMode = switch (tm) {
-          'light' => ThemeMode.light,
-          'dark' => ThemeMode.dark,
-          _ => ThemeMode.system,
-        };
-      }
-
-      _user = await AuthService.I.getCurrentUser();
-    } catch (e) {
-      debugPrint('Erro na inicialização: $e');
-    } finally {
-      _loading = false;
-      notifyListeners();
+  ThemeMode get themeMode => _themeMode;
+  String get parkingName => _parkingName;
+  int get graceSeconds => _graceSeconds;
+  int get firstHourCents => _firstHourCents;
+  int get extraHourCents => _extraHourCents;
+  bool get initialized => _initialized;
+  PricingPolicy get pricing {
+    if (!_initialized) {
+      throw StateError('As configurações ainda estão carregando');
     }
+    return PricingPolicy(
+      graceSeconds: _graceSeconds,
+      firstHourCents: _firstHourCents,
+      extraHourCents: _extraHourCents,
+    );
   }
 
-  // Autentica o usuário
-  Future<void> login(String email, String password) async {
-    _loading = true;
-    notifyListeners();
+  Future<void> _initialize() async {
+    final preferences = await SharedPreferences.getInstance();
+    _themeMode = switch (preferences.getString(_themeKey)) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+    _parkingName = preferences.getString(_parkingNameKey) ?? 'Parking BR';
+    _graceSeconds = preferences.getInt(_graceSecondsKey) ?? 15 * 60;
+    _firstHourCents = preferences.getInt(_firstHourCentsKey) ?? 1000;
+    _extraHourCents = preferences.getInt(_extraHourCentsKey) ?? 500;
     try {
-      _user = await AuthService.I.login(email, password);
-    } finally {
-      _loading = false;
-      notifyListeners();
+      PricingPolicy(
+        graceSeconds: _graceSeconds,
+        firstHourCents: _firstHourCents,
+        extraHourCents: _extraHourCents,
+      ).validate();
+    } on ArgumentError {
+      _graceSeconds = 15 * 60;
+      _firstHourCents = 1000;
+      _extraHourCents = 500;
     }
-  }
-
-  // Registra um novo usuário
-  Future<void> register({
-    required String name,
-    required String email,
-    required String password,
-    required String cpf,
-  }) async {
-    _loading = true;
-    notifyListeners();
-    try {
-      await AuthService.I.register(
-        name: name,
-        email: email,
-        password: password,
-        cpf: cpf,
-      );
-    } finally {
-      _loading = false;
-      notifyListeners();
-    }
-  }
-
-  // Encerra a sessão do usuário
-  Future<void> logout() async {
-    await AuthService.I.logout();
-    _user = null;
+    _initialized = true;
     notifyListeners();
   }
 
-  // Altera o tema do aplicativo
   Future<void> setThemeMode(ThemeMode mode) async {
+    final preferences = await SharedPreferences.getInstance();
+    final value = switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      _ => 'system',
+    };
+    if (!await preferences.setString(_themeKey, value)) {
+      throw StateError('Não foi possível salvar o tema');
+    }
     _themeMode = mode;
     notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final value = switch (mode) {
-        ThemeMode.light => 'light',
-        ThemeMode.dark => 'dark',
-        _ => 'system',
-      };
-      await prefs.setString(_prefsKeyThemeMode, value);
-    } catch (e) {
-      debugPrint('Erro ao persistir tema: $e');
-    }
   }
 
-  // Atualiza os dados do usuário
-  Future<void> updateUser(AppUser newUser) async {
-    _user = newUser.copyWith(updatedAt: DateTime.now());
+  Future<void> updateOperationalSettings({
+    required String parkingName,
+    required int graceSeconds,
+    required int firstHourCents,
+    required int extraHourCents,
+  }) async {
+    final name = parkingName.trim();
+    if (name.isEmpty) {
+      throw ArgumentError('Informe o nome do estacionamento');
+    }
+    PricingPolicy(
+      graceSeconds: graceSeconds,
+      firstHourCents: firstHourCents,
+      extraHourCents: extraHourCents,
+    ).validate();
+
+    final preferences = await SharedPreferences.getInstance();
+    final writesSucceeded =
+        await preferences.setString(_parkingNameKey, name) &&
+        await preferences.setInt(_graceSecondsKey, graceSeconds) &&
+        await preferences.setInt(_firstHourCentsKey, firstHourCents) &&
+        await preferences.setInt(_extraHourCentsKey, extraHourCents);
+    if (!writesSucceeded) {
+      throw StateError('Não foi possível salvar as configurações');
+    }
+
+    _parkingName = name;
+    _graceSeconds = graceSeconds;
+    _firstHourCents = firstHourCents;
+    _extraHourCents = extraHourCents;
     notifyListeners();
   }
 }

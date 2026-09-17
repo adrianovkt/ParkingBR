@@ -6,8 +6,7 @@ class Vehicle {
   final String ownerName;
   final String ownerCpf;
   final String ownerContact;
-  final String? ownerId;
-  final String? photoUrl;
+  final bool archived;
 
   Vehicle({
     required this.id,
@@ -17,8 +16,7 @@ class Vehicle {
     required this.ownerName,
     required this.ownerCpf,
     required this.ownerContact,
-    this.ownerId,
-    this.photoUrl,
+    this.archived = false,
   });
 
   Vehicle copyWith({
@@ -29,8 +27,7 @@ class Vehicle {
     String? ownerName,
     String? ownerCpf,
     String? ownerContact,
-    String? ownerId,
-    String? photoUrl,
+    bool? archived,
   }) {
     return Vehicle(
       id: id ?? this.id,
@@ -40,8 +37,7 @@ class Vehicle {
       ownerName: ownerName ?? this.ownerName,
       ownerCpf: ownerCpf ?? this.ownerCpf,
       ownerContact: ownerContact ?? this.ownerContact,
-      ownerId: ownerId ?? this.ownerId,
-      photoUrl: photoUrl ?? this.photoUrl,
+      archived: archived ?? this.archived,
     );
   }
 
@@ -54,8 +50,7 @@ class Vehicle {
       'ownerName': ownerName,
       'ownerCpf': ownerCpf,
       'ownerContact': ownerContact,
-      'ownerId': ownerId,
-      'photoUrl': photoUrl,
+      'archived': archived,
     };
   }
 
@@ -65,11 +60,32 @@ class Vehicle {
       plate: json['plate'],
       model: json['model'],
       color: json['color'],
-      ownerName: json['ownerName'],
-      ownerCpf: json['ownerCpf'],
-      ownerContact: json['ownerContact'],
-      ownerId: json['ownerId'],
-      photoUrl: json['photoUrl'],
+      ownerName: json['ownerName'] as String? ?? '',
+      ownerCpf: json['ownerCpf'] as String? ?? '',
+      ownerContact: json['ownerContact'] as String? ?? '',
+      archived: json['archived'] as bool? ?? false,
     );
   }
+
+  Map<String, Object?> toDatabase() => {
+    'id': id,
+    'plate': plate.replaceAll('-', ''),
+    'model': model,
+    'color': color,
+    'owner_name': ownerName,
+    'owner_cpf': ownerCpf,
+    'owner_contact': ownerContact,
+    'archived': archived ? 1 : 0,
+  };
+
+  factory Vehicle.fromDatabase(Map<String, Object?> row) => Vehicle(
+    id: row['id']! as String,
+    plate: row['plate']! as String,
+    model: row['model']! as String,
+    color: row['color']! as String,
+    ownerName: row['owner_name']! as String,
+    ownerCpf: row['owner_cpf']! as String,
+    ownerContact: row['owner_contact']! as String,
+    archived: row['archived'] == 1,
+  );
 }

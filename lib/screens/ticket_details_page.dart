@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,8 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/payment_method.dart';
 import '../models/ticket.dart';
 import '../providers/parking_provider.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/gradient_button.dart';
+import '../utils/plate_validator.dart';
 
 class TicketDetailsPage extends StatefulWidget {
   final String ticketId;
@@ -18,7 +16,7 @@ class TicketDetailsPage extends StatefulWidget {
   const TicketDetailsPage({super.key, required this.ticketId});
 
   @override
-  _TicketDetailsPageState createState() => _TicketDetailsPageState();
+  State<TicketDetailsPage> createState() => _TicketDetailsPageState();
 }
 
 class _TicketDetailsPageState extends State<TicketDetailsPage> {
@@ -29,7 +27,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -40,354 +38,267 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     super.dispose();
   }
 
-  void _processPayment() async {
-    if (_selectedPaymentMethod == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecione um método de pagamento')),
-      );
+  Future<void> _registerExit() async {
+    final paymentMethod = _selectedPaymentMethod;
+    if (_isLoading || paymentMethod == null) {
+      if (paymentMethod == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecione como o valor foi recebido')),
+        );
+      }
       return;
     }
+
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      final provider = Provider.of<ParkingProvider>(context, listen: false);
-      provider.checkOut(widget.ticketId, _selectedPaymentMethod!.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          content: const Text('Pagamento realizado com sucesso! Ticket encerrado.'),
-        ),
+    try {
+      await context.read<ParkingProvider>().checkOut(
+        widget.ticketId,
+        paymentMethod.id,
       );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       context.pop();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Recebimento e saída registrados')),
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final provider = Provider.of<ParkingProvider>(context);
-    Ticket? ticket;
-    try {
-      ticket = provider.tickets.firstWhere((t) => t.id == widget.ticketId);
-    } catch (e) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Erro')),
-        body: const Center(child: Text('Ticket não encontrado')),
+    final parking = context.watch<ParkingProvider>();
+    final ticket = parking.getTicket(widget.ticketId);
+    if (ticket == null) {
+      return const Scaffold(
+        body: Center(child: Text('Permanência não encontrada')),
       );
     }
-
-    final vehicle = provider.getVehicle(ticket.vehicleId);
-    if (vehicle == null) {
-      return const Scaffold(body: Center(child: Text('Veículo não encontrado')));
+    if (ticket.status == TicketStatus.completed) {
+      _timer?.cancel();
+      _timer = null;
     }
 
-    final cost = ticket.currentCost;
-    final duration = DateTime.now().difference(ticket.entryTime);
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes % 60;
+    final vehicle = parking.getVehicle(ticket.vehicleId);
+    final candidateEnd = ticket.exitTime ?? DateTime.now();
+    final end = candidateEnd.isBefore(ticket.entryTime)
+        ? ticket.entryTime
+        : candidateEnd;
+    final duration = end.toUtc().difference(ticket.entryTime.toUtc());
+    final amountCents = ticket.currentCostCents(end);
+    final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalhes do Ticket'), centerTitle: true),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+      appBar: AppBar(title: const Text('Permanência')),
+      body: ListView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            GlassCard(
+        children: [
+          Center(
+            child: CircleAvatar(
+              radius: 42,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: Icon(
+                Icons.directions_car_filled_rounded,
+                size: 44,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            PlateValidator.format(ticket.plateAtEntry),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (vehicle != null &&
+              (vehicle.model.isNotEmpty || vehicle.color.isNotEmpty))
+            Text(
+              [
+                vehicle.model,
+                vehicle.color,
+              ].where((value) => value.isNotEmpty).join(' • '),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyLarge,
+            ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Container(
-                    width: double.infinity,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceVariant,
-                      borderRadius: BorderRadius.circular(16),
-                      image: vehicle.photoUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(vehicle.photoUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                  _DetailRow(label: 'Número', value: ticket.id),
+                  _DetailRow(
+                    label: 'Entrada',
+                    value: DateFormat(
+                      'dd/MM/yyyy HH:mm',
+                    ).format(ticket.entryTime.toLocal()),
+                  ),
+                  _DetailRow(
+                    label: ticket.exitTime == null ? 'Tempo atual' : 'Duração',
+                    value: _durationLabel(duration),
+                  ),
+                  if (ticket.exitTime != null)
+                    _DetailRow(
+                      label: 'Saída',
+                      value: DateFormat(
+                        'dd/MM/yyyy HH:mm',
+                      ).format(ticket.exitTime!.toLocal()),
                     ),
-                    child: vehicle.photoUrl == null
-                        ? Icon(
-                            Icons.directions_car,
-                            size: 80,
-                            color: theme.colorScheme.primary.withOpacity(0.5),
-                          )
-                        : null,
-                  ).animate().scale(
-                    duration: 600.milliseconds,
-                    curve: Curves.easeOutBack,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                        vehicle.plate,
-                        style: theme.textTheme.headlineLarge?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                      .animate()
-                      .fadeIn(delay: 200.milliseconds)
-                      .slideY(begin: 0.2),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${vehicle.model} • ${vehicle.color}',
-                    style: theme.textTheme.titleMedium,
-                  ).animate().fadeIn(delay: 300.milliseconds),
-                  const SizedBox(height: 24),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Informações do Veículo',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ).animate().fadeIn(delay: 400.milliseconds),
-                  const Divider().animate().scaleX(
-                    delay: 400.milliseconds,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  _buildAnimatedDetailRow(
-                    context,
-                    'Proprietário',
-                    vehicle.ownerName,
-                    450,
-                  ),
-                  _buildAnimatedDetailRow(
-                    context,
-                    'CPF',
-                    vehicle.ownerCpf,
-                    500,
-                  ),
-                  _buildAnimatedDetailRow(
-                    context,
-                    'Contato',
-                    vehicle.ownerContact,
-                    550,
-                  ),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Informações da Estada',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ).animate().fadeIn(delay: 600.milliseconds),
-                  const Divider().animate().scaleX(
-                    delay: 600.milliseconds,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  _buildAnimatedDetailRow(
-                    context,
-                    'Horário de Entrada',
-                    DateFormat('dd/MM/yyyy HH:mm').format(ticket.entryTime),
-                    650,
-                  ),
-                  _buildAnimatedDetailRow(
-                    context,
-                    'Duração',
-                    '${hours}h ${minutes}m',
-                    700,
+                  if (vehicle != null && vehicle.ownerName.isNotEmpty)
+                    _DetailRow(label: 'Proprietário', value: vehicle.ownerName),
+                  _DetailRow(
+                    label: 'Tarifa',
+                    value: _pricingLabel(ticket, currency),
                   ),
                 ],
               ),
-            ).animate().fadeIn().slideY(begin: 0.1),
-            const SizedBox(height: 24),
-            Container(
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withOpacity(0.5),
-                ),
-              ),
               child: Column(
                 children: [
                   Text(
-                    'Valor Total',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    ticket.exitTime == null ? 'Valor atual' : 'Valor recebido',
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    currency.format(amountCents / 100),
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(cost),
-                        style: theme.textTheme.displayMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                      .animate(onPlay: (c) => c.repeat(reverse: true))
-                      .shimmer(duration: 2.seconds),
+                  if (ticket.receivedVia != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_paymentLabel(ticket.receivedVia!)),
+                  ],
                 ],
               ),
-            ).animate().fadeIn(delay: 800.milliseconds).scale(),
-            const SizedBox(height: 32),
-            if (ticket.status == TicketStatus.active) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Método de Pagamento',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ).animate().fadeIn(delay: 900.milliseconds),
-              const SizedBox(height: 16),
-              ...provider.paymentMethods.asMap().entries.map((entry) {
-                final index = entry.key;
-                final method = entry.value;
-                final isSelected = _selectedPaymentMethod?.id == method.id;
-                return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: InkWell(
-                        onTap: () =>
-                            setState(() => _selectedPaymentMethod = method),
-                        borderRadius: BorderRadius.circular(16),
-                        child: AnimatedContainer(
-                          duration: 300.milliseconds,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? theme.colorScheme.primary.withOpacity(0.1)
-                                : theme.colorScheme.surface,
-                            border: Border.all(
-                              color: isSelected
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.outline.withOpacity(0.3),
-                              width: isSelected ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(method.icon, color: method.color, size: 32),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      method.name == 'PIX' ? 'PIX' : (method.name == 'Cash' ? 'Dinheiro' : method.name),
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                    if (method.details != null)
-                                      Text(
-                                        method.details!,
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              if (isSelected)
-                                Icon(
-                                  Icons.check_circle,
-                                  color: theme.colorScheme.primary,
-                                ).animate().scale(),
-                            ],
-                          ),
-                        ),
-                      ),
+            ),
+          ),
+          if (ticket.status == TicketStatus.active) ...[
+            const SizedBox(height: 24),
+            Text('Registrar recebimento', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(
+              'PIX e cartão são confirmações informadas pelo operador.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            RadioGroup<PaymentMethod>(
+              groupValue: _selectedPaymentMethod,
+              onChanged: _isLoading
+                  ? (_) {}
+                  : (value) {
+                      setState(() => _selectedPaymentMethod = value);
+                    },
+              child: Column(
+                children: parking.paymentMethods
+                    .map((method) {
+                      return RadioListTile<PaymentMethod>(
+                        value: method,
+                        enabled: !_isLoading,
+                        secondary: Icon(method.icon, color: method.color),
+                        title: Text(method.name),
+                      );
+                    })
+                    .toList(growable: false),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _registerExit,
+              icon: _isLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                    .animate(delay: (1000 + (index * 50)).milliseconds)
-                    .fadeIn()
-                    .slideX(begin: 0.1);
-              }),
-              const SizedBox(height: 32),
-              GradientButton(
-                    text: 'Confirmar Pagamento',
-                    onTap: _processPayment,
-                    isLoading: _isLoading,
-                  )
-                  .animate()
-                  .fadeIn(delay: 1200.milliseconds)
-                  .scale(curve: Curves.easeOutBack),
-            ] else ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.green),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 48,
-                    ).animate().scale(
-                      duration: 600.milliseconds,
-                      curve: Curves.easeOutBack,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Pago e Finalizado',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ).animate().fadeIn(delay: 200.milliseconds),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Saída: ${DateFormat('HH:mm').format(ticket.exitTime ?? DateTime.now())}',
-                      style: theme.textTheme.bodyMedium,
-                    ).animate().fadeIn(delay: 400.milliseconds),
-                  ],
-                ),
-              ).animate().fadeIn().slideY(begin: 0.2),
-            ],
+                  : const Icon(Icons.logout_rounded),
+              label: const Text('Registrar recebimento e saída'),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildAnimatedDetailRow(
-    BuildContext context,
-    String label,
-    String value,
-    int delayMs,
-  ) {
+  String _durationLabel(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    return '${hours}h ${minutes}min';
+  }
+
+  String _paymentLabel(String method) {
+    return switch (method) {
+      'cash' => 'Dinheiro',
+      'pix' => 'PIX confirmado',
+      'card' => 'Cartão na maquininha',
+      'free' => 'Isento',
+      _ => 'Não informado',
+    };
+  }
+
+  String _pricingLabel(Ticket ticket, NumberFormat currency) {
+    final graceMinutes = ticket.graceSeconds ~/ 60;
+    final origin = ticket.pricingOrigin == PricingOrigin.legacyDefault
+        ? 'Regra legada • '
+        : '';
+    return '$origin$graceMinutes min de tolerância • '
+        '${currency.format(ticket.firstHourCents / 100)} na primeira hora • '
+        '${currency.format(ticket.extraHourCents / 100)} por hora adicional';
+  }
+
+  String _message(Object error) => error.toString().replaceFirst(
+    RegExp(r'^(Bad state|Invalid argument): '),
+    '',
+  );
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
-          Text(
-            value,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
-    ).animate(delay: delayMs.milliseconds).fadeIn().slideX(begin: 0.05);
+    );
   }
 }
